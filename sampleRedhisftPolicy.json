@@ -15,7 +15,6 @@
       "Effect": "Allow",
       "Action": [
         "redshift:DescribeClusters",
-        "redshift-data:CancelStatement",
         "redshift-data:ExecuteStatement"
       ],
       "Resource": "*"
