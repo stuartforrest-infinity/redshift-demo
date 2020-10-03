@@ -1,0 +1,24 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "VisualEditor0",
+      "Effect": "Allow",
+      "Action": "redshift:GetClusterCredentials",
+      "Resource": [
+        "arn:aws:redshift:*:387013884143:dbuser:*/*",
+        "arn:aws:redshift:*:387013884143:dbname:*/*"
+      ]
+    },
+    {
+      "Sid": "VisualEditor1",
+      "Effect": "Allow",
+      "Action": [
+        "redshift:DescribeClusters",
+        "redshift-data:CancelStatement",
+        "redshift-data:ExecuteStatement"
+      ],
+      "Resource": "*"
+    }
+  ]
+}

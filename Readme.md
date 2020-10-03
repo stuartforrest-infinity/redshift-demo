@@ -21,7 +21,7 @@
 13. Add policy to lambda execution role with the following permissions:
   - Edit `Basic Settings` in Lambda console for your Lambda
   - Click view `[random lambda role name]` policy
-  - Create a policy with the following permissions
+  - Create a policy with the following permissions (sample JSON in `sampleRedhisftPolicy.json`)
     - Redshift - DescribeClusters, GetClusterCredentials
       - Check `any in this account` for Resources for `dbuser` and `dbname`
     - Redshift Data API - ExecuteStatement
