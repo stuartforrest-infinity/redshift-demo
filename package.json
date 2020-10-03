@@ -1,0 +1,10 @@
+{
+  "name": "redshift-lambda-demo",
+  "version": "1.0.0",
+  "main": "index.js",
+  "license": "MIT",
+  "dependencies": {
+    "serverless": "^2.4.0",
+    "serverless-python-requirements": "^5.1.0"
+  }
+}
