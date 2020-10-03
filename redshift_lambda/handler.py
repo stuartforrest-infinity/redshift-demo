@@ -32,8 +32,8 @@ def start(event, context):
     try:
         conn = psycopg2.connect(
             dbname=db,
-            user=user,
-            password=passwd,
+            user=creds["DbUser"],
+            password=creds["DbPassword"],
             port=port,
             host=host)
     except Exception as ERROR:
