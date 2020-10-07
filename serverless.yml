@@ -1,6 +1,7 @@
-service: greengrasserverless
+service: redshift
 plugins:
   - serverless-python-requirements
+  - serverless-iam-roles-per-function
 
 provider:
   name: aws
@@ -15,3 +16,165 @@ functions:
     runtime: python3.8
     handler: handler.start
     module: redshift_lambda
+    iamRoleStatements:
+      - Effect: "Allow"        
+        Action:
+          - redshift:GetClusterCredentials   
+        Resource:
+          - "arn:aws:redshift:${self:provider.region}:*:dbuser:*/*"
+          - "arn:aws:redshift:${self:provider.region}:*:dbname:*/*"
+      - Effect: "Allow"        
+        Action:
+          - redshift:DescribeClusters   
+          - redshift-data:ExecuteStatement   
+        Resource: "*"
+    vpc:
+      securityGroupIds:
+        - !Ref SecurityGroup
+      subnetIds:
+        - !Ref PrivateSubnetA
+    environment:
+      DB_HOST: !GetAtt RedshiftCluster.Endpoint.Address
+      DB_USER: awsuser
+      DB_PORT: !GetAtt RedshiftCluster.Endpoint.Port
+      DB_NAME: dev
+      DB_CLUSTER: !Ref RedshiftCluster
+
+resources:
+  Resources:
+  # First, a VPC:
+    VPC:
+      Type: AWS::EC2::VPC
+      Properties:
+        CidrBlock: 10.1.0.0/16
+        EnableDnsSupport: true
+        EnableDnsHostnames: true
+
+    # Our VPC will need internet access:      
+    InternetGateway:
+      Type: AWS::EC2::InternetGateway
+      DependsOn: 
+        - VPC
+    AttachGateway:
+      Type: AWS::EC2::VPCGatewayAttachment
+      # Notice how you can't attach an IGW to a VPC unless both are created:
+      Properties:
+        VpcId: !Ref VPC
+        InternetGatewayId: !Ref InternetGateway
+
+    # public and private subnet:
+    PublicSubnetA:
+      Type: AWS::EC2::Subnet
+      Properties:
+        VpcId: !Ref VPC
+        CidrBlock: 10.1.10.0/24
+        AvailabilityZone: !Select [ 0, !GetAZs "${opt:region, self:provider.region}" ]
+        # Get the first AZ in the list        
+    PrivateSubnetA:
+      Type: AWS::EC2::Subnet
+      Properties:
+        VpcId: !Ref VPC
+        CidrBlock: 10.1.50.0/24
+        AvailabilityZone: !Select [ 0, !GetAZs "${opt:region, self:provider.region}" ]   
+        # Get the first AZ in the list
+          
+    # Some route tables for our subnets:
+    PublicRouteTable:
+      Type: AWS::EC2::RouteTable
+      Properties:
+        VpcId: !Ref VPC
+        Tags:
+        - Key: Name
+          Value: Public
+
+    PublicRoute1:   # Public route table has direct routing to IGW:
+      Type: AWS::EC2::Route
+      DependsOn:
+        - AttachGateway
+      Properties:
+        RouteTableId: !Ref PublicRouteTable
+        DestinationCidrBlock: 0.0.0.0/0
+        GatewayId: !Ref InternetGateway
+        
+    # Here is a private route table:
+    PrivateRouteTable:
+      Type: AWS::EC2::RouteTable
+      Properties:
+        VpcId: !Ref VPC
+        Tags:
+        - Key: Name
+          Value: Private
+
+    PrivateRoute1:            # Private route table can access web via NAT (created below)
+      Type: AWS::EC2::Route
+      Properties:
+        RouteTableId: !Ref PrivateRouteTable
+        DestinationCidrBlock: 0.0.0.0/0
+        # Route traffic through the NAT Gateway:
+        NatGatewayId: !Ref NATGateway
+
+    SecurityGroup:
+      Type: AWS::EC2::SecurityGroup
+      Properties:
+        GroupDescription: Security group
+        VpcId: !Ref VPC
+
+    SecurtiyGroupIngress:
+      Type: AWS::EC2::SecurityGroupIngress
+      Properties:
+        GroupId: !Ref SecurityGroup
+        IpProtocol: "-1"
+        SourceSecurityGroupId: !Ref SecurityGroup
+
+    SecurtiyGroupEgress:
+      Type: AWS::EC2::SecurityGroupEgress
+      Properties:
+        GroupId: !Ref SecurityGroup
+        IpProtocol: "-1"
+        DestinationSecurityGroupId: !Ref SecurityGroup
+        
+    # Attach the public subnets to public route tables, 
+    # and attach the private subnets to private route tables:    
+    PublicSubnetARouteTableAssociation:
+      Type: AWS::EC2::SubnetRouteTableAssociation
+      Properties:
+        SubnetId: !Ref PublicSubnetA
+        RouteTableId: !Ref PublicRouteTable
+
+    PrivateSubnetARouteTableAssociation:
+      Type: AWS::EC2::SubnetRouteTableAssociation
+      Properties:
+        SubnetId: !Ref PrivateSubnetA
+        RouteTableId: !Ref PrivateRouteTable
+
+    # A NAT Gateway: 
+    NATGateway:
+      Type: AWS::EC2::NatGateway
+      Properties: 
+        AllocationId: !GetAtt ElasticIPAddress.AllocationId
+        SubnetId: !Ref PublicSubnetA
+
+    ElasticIPAddress:
+      Type: AWS::EC2::EIP
+      Properties:
+        Domain: VPC
+
+    RedshiftCluster:
+      Type: AWS::Redshift::Cluster
+      Properties:
+        ClusterType: single-node
+        NodeType: dc2.large
+        DBName: dev
+        MasterUsername: testuser
+        MasterUserPassword: Password1
+        VpcSecurityGroupIds:
+          - !Ref SecurityGroup
+        ClusterSubnetGroupName: !Ref RedshiftClusterSubnetGroup
+        PubliclyAccessible: false
+
+    RedshiftClusterSubnetGroup:
+      Type: AWS::Redshift::ClusterSubnetGroup
+      Properties:
+        Description: Cluster subnet group
+        SubnetIds:
+          - !Ref PrivateSubnetA
