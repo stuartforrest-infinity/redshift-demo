@@ -42,7 +42,7 @@ functions:
 
 resources:
   Resources:
-  # First, a VPC:
+    # VPC:
     VPC:
       Type: AWS::EC2::VPC
       Properties:
@@ -50,26 +50,26 @@ resources:
         EnableDnsSupport: true
         EnableDnsHostnames: true
 
-    # Our VPC will need internet access:      
+    # IGW for internet access:      
     InternetGateway:
       Type: AWS::EC2::InternetGateway
       DependsOn: 
         - VPC
     AttachGateway:
       Type: AWS::EC2::VPCGatewayAttachment
-      # Notice how you can't attach an IGW to a VPC unless both are created:
       Properties:
         VpcId: !Ref VPC
         InternetGatewayId: !Ref InternetGateway
 
-    # public and private subnet:
+    # Public and private subnet:
     PublicSubnetA:
       Type: AWS::EC2::Subnet
       Properties:
         VpcId: !Ref VPC
         CidrBlock: 10.1.10.0/24
         AvailabilityZone: !Select [ 0, !GetAZs "${opt:region, self:provider.region}" ]
-        # Get the first AZ in the list        
+        # Get the first AZ in the list   
+       
     PrivateSubnetA:
       Type: AWS::EC2::Subnet
       Properties:
@@ -78,7 +78,7 @@ resources:
         AvailabilityZone: !Select [ 0, !GetAZs "${opt:region, self:provider.region}" ]   
         # Get the first AZ in the list
           
-    # Some route tables for our subnets:
+    # Route tables:
     PublicRouteTable:
       Type: AWS::EC2::RouteTable
       Properties:
@@ -87,7 +87,7 @@ resources:
         - Key: Name
           Value: Public
 
-    PublicRoute1:   # Public route table has direct routing to IGW:
+    PublicRoute1: # Public route table has direct routing to IGW:
       Type: AWS::EC2::Route
       DependsOn:
         - AttachGateway
@@ -95,8 +95,7 @@ resources:
         RouteTableId: !Ref PublicRouteTable
         DestinationCidrBlock: 0.0.0.0/0
         GatewayId: !Ref InternetGateway
-        
-    # Here is a private route table:
+
     PrivateRouteTable:
       Type: AWS::EC2::RouteTable
       Properties:
@@ -105,14 +104,41 @@ resources:
         - Key: Name
           Value: Private
 
-    PrivateRoute1:            # Private route table can access web via NAT (created below)
+    PrivateRoute1: # Private route table can access web via NAT
       Type: AWS::EC2::Route
       Properties:
         RouteTableId: !Ref PrivateRouteTable
         DestinationCidrBlock: 0.0.0.0/0
         # Route traffic through the NAT Gateway:
         NatGatewayId: !Ref NATGateway
+        
+    # Attach the public subnets to public route tables, 
+    # and attach the private subnets to private route tables:    
+    PublicSubnetARouteTableAssociation:
+      Type: AWS::EC2::SubnetRouteTableAssociation
+      Properties:
+        SubnetId: !Ref PublicSubnetA
+        RouteTableId: !Ref PublicRouteTable
 
+    PrivateSubnetARouteTableAssociation:
+      Type: AWS::EC2::SubnetRouteTableAssociation
+      Properties:
+        SubnetId: !Ref PrivateSubnetA
+        RouteTableId: !Ref PrivateRouteTable
+
+    # NAT Gateway: 
+    NATGateway:
+      Type: AWS::EC2::NatGateway
+      Properties: 
+        AllocationId: !GetAtt ElasticIPAddress.AllocationId
+        SubnetId: !Ref PublicSubnetA
+
+    ElasticIPAddress:
+      Type: AWS::EC2::EIP
+      Properties:
+        Domain: VPC
+
+    # Security Group that everything will share
     SecurityGroup:
       Type: AWS::EC2::SecurityGroup
       Properties:
@@ -132,41 +158,16 @@ resources:
         GroupId: !Ref SecurityGroup
         IpProtocol: "-1"
         DestinationSecurityGroupId: !Ref SecurityGroup
-        
-    # Attach the public subnets to public route tables, 
-    # and attach the private subnets to private route tables:    
-    PublicSubnetARouteTableAssociation:
-      Type: AWS::EC2::SubnetRouteTableAssociation
-      Properties:
-        SubnetId: !Ref PublicSubnetA
-        RouteTableId: !Ref PublicRouteTable
 
-    PrivateSubnetARouteTableAssociation:
-      Type: AWS::EC2::SubnetRouteTableAssociation
-      Properties:
-        SubnetId: !Ref PrivateSubnetA
-        RouteTableId: !Ref PrivateRouteTable
-
-    # A NAT Gateway: 
-    NATGateway:
-      Type: AWS::EC2::NatGateway
-      Properties: 
-        AllocationId: !GetAtt ElasticIPAddress.AllocationId
-        SubnetId: !Ref PublicSubnetA
-
-    ElasticIPAddress:
-      Type: AWS::EC2::EIP
-      Properties:
-        Domain: VPC
-
+    # Redshift Cluter
     RedshiftCluster:
       Type: AWS::Redshift::Cluster
       Properties:
         ClusterType: single-node
         NodeType: dc2.large
         DBName: dev
-        MasterUsername: testuser
-        MasterUserPassword: Password1
+        MasterUsername: testuser # TODO: Inject these
+        MasterUserPassword: Password1 # TODO: Inject these
         VpcSecurityGroupIds:
           - !Ref SecurityGroup
         ClusterSubnetGroupName: !Ref RedshiftClusterSubnetGroup
