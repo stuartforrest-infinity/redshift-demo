@@ -35,7 +35,7 @@ functions:
         - !Ref PrivateSubnetA
     environment:
       DB_HOST: !GetAtt RedshiftCluster.Endpoint.Address
-      DB_USER: awsuser
+      DB_USER: testuser
       DB_PORT: !GetAtt RedshiftCluster.Endpoint.Port
       DB_NAME: dev
       DB_CLUSTER: !Ref RedshiftCluster
@@ -157,7 +157,7 @@ resources:
       Properties:
         GroupId: !Ref SecurityGroup
         IpProtocol: "-1"
-        DestinationSecurityGroupId: !Ref SecurityGroup
+        CidrIp: 0.0.0.0/0
 
     # Redshift Cluter
     RedshiftCluster:
